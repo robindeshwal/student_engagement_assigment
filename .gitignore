@@ -175,3 +175,5 @@ cython_debug/
 
 # data folders
 data/cleaned/
+data/transformed/
+outputs
