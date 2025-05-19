@@ -25,7 +25,7 @@ student_engagement_assigment/
 │
 ├── README.md                  # Project overview and instructions
 └── requirements.txt           # Python dependencies
-
+```
 
 ## How to Run
 
