@@ -174,4 +174,4 @@ cython_debug/
 .pypirc
 
 # data folders
-.DS_Store
+*.DS_Store
