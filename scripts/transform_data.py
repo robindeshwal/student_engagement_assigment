@@ -7,51 +7,65 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 students = pd.read_csv(os.path.join(INPUT_DIR, 'student_data.csv'))
 logins = pd.read_csv(os.path.join(INPUT_DIR, 'student_logins.csv'))
+assignment = pd.read_csv(os.path.join(INPUT_DIR, 'assignment_data.csv'))
 grades = pd.read_csv(os.path.join(INPUT_DIR, 'assignment_submissions.csv'))
 courses = pd.read_csv(os.path.join(INPUT_DIR, 'course_data.csv'))
+content = pd.read_csv(os.path.join(INPUT_DIR, 'content_access.csv'))
 
 # ================ STUDENT LEVEL AGGREGATION ===========================
 login_count = logins.groupby('student_id').size().reset_index(name='login_count')
 avg_grades = grades.groupby('student_id')['points'].mean().reset_index(name='avg_grade')
+content_access_count = content.groupby('student_id')
+access_count = content_access_count.size().reset_index(name='content_access_count')
+total_minutes = content_access_count['time_spent_minutes'].sum().reset_index()
+
+total_minutes['total_hours_spent'] = (total_minutes['time_spent_minutes'] / 60).round(2)
+total_minutes = total_minutes.drop(columns='time_spent_minutes')
+# import ipdb; ipdb.set_trace()
 
 # Merge to form student-level engagement summary
-engamement = pd.merge(students, login_count, on='student_id', how='left')
-engamement = pd.merge(engamement, avg_grades, on='student_id', how='left')
+engagement = pd.merge(students, login_count, on='student_id', how='left')
+engagement = pd.merge(engagement, avg_grades, on='student_id', how='left')
+engagement = pd.merge(engagement, access_count, on='student_id', how='left')
+engagement = pd.merge(engagement, total_minutes, on='student_id', how='left')
 
-engamement.to_csv(os.path.join(OUTPUT_DIR, 'student_engagment_summary.csv'))
-print("Transfromed data saved.")
+engagement.to_csv(os.path.join(OUTPUT_DIR, 'student_engagment_summary.csv'), index=False)
+print("Student-Level data saved.")
 
 # =============== COURSE LEVEL AGGREGRATION ============================
 
-# Assume each student is linked to one course (based on student_data.csv having course_id)
+assignment_activity = pd.merge(grades, assignment[['assignment_id', 'course_id']], 
+                            on='assignment_id', how='left')
 
-# students_renamed = students.rename(columns={'program': 'course_id'})
+assignment_status_counts = (assignment_activity.groupby(['course_id', 'assignment_id', 'status'])['student_id']
+                                .nunique().reset_index(name='student_count'))
 
-# student_course = students_renamed[['student_id', 'course_id']]
-# grades_sc = pd.merge(student_course, grades, on='student_id', how='inner')
-# logins_sc = pd.merge(student_course, logins, on='student_id', how='inner')
+assignment_summary = assignment_status_counts.pivot_table(
+    index=['course_id', 'assignment_id'],
+    columns='status',
+    values='student_count',
+    fill_value=0
+).reset_index()
 
-# course_grades = grades_sc.groupby('course_id')['points'].mean().reset_index(name='avg_grade')
-# course_logins = logins_sc.groupby('course_id').size().reset_index(name='total_logins')
-
-# course_summary = pd.merge(course_grades, course_logins, on='course_id', how='outer')
-# course_summary = pd.merge(course_summary, courses, on='course_id', how='left')
-
-# course_summary.to_csv(os.path.join(OUTPUT_DIR, 'course_engagement_summary.csv'), index=False)
-# print("Course-level engagement summary saved.")
-
+assignment_summary.to_csv(os.path.join(OUTPUT_DIR, 'course_assignment_status_summary.csv'), index=False)
+print("Course-level assignment submission summary data saved.")
 
 # =============== DEPARTMENT LEVEL AGGREGRATION =======================
-# Join student -> course -> department
 
-# students_with_dept = pd.merge(students_renamed, courses, on='course_id', how='left')
+students = students.rename(columns={'program': 'department'})
+grades_with_dept = pd.merge(grades, students[['student_id', 'department']], on='student_id', how='left')
 
-# grades_sd = pd.merge(students_with_dept[['student_id', 'department']], grades, on='student_id', how='inner')
-# logins_sd = pd.merge(students_with_dept[['student_id', 'department']], logins, on='student_id', how='inner')
+total_students = students.groupby('department')['student_id'].nunique().reset_index(name='total_students')
 
-# dept_grades = grades_sd.groupby('department')['points'].mean().reset_index(name='avg_grade')
-# dept_logins = logins_sd.groupby('department').size().reset_index(name='total_logins')
+avg_grade_per_student = grades_with_dept.groupby(['student_id', 'department'])['points'].mean().reset_index(name='avg_grade')
 
-# department_summary = pd.merge(dept_grades, dept_logins, on='department', how='outer')
-# department_summary.to_csv(os.path.join(OUTPUT_DIR, 'department_engagement_summary.csv'), index=False)
-# print("Department-level engagement summary saved.")
+top_students = avg_grade_per_student.sort_values(['department', 'avg_grade'], ascending=[True, False])
+top_students_per_dept = top_students.groupby('department').first().reset_index()
+top_students_per_dept = top_students_per_dept.rename(columns={
+    'student_id': 'top_student_id',
+    'avg_grade': 'top_student_grade'
+})
+
+department_summary = pd.merge(total_students, top_students_per_dept, on='department', how='left')
+department_summary.to_csv(os.path.join(OUTPUT_DIR, 'department_top_students.csv'), index=False)
+print("Department-level top student summary saved.")
